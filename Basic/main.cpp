@@ -29,4 +29,6 @@ void setup() {
 
   pinMode(D13, OUTPUT);
   digitalWrite(D13, HIGH);
+
+  Serial2.printf("- random(): %lu\n", random()); // This value must be changed on every boot.
 }
