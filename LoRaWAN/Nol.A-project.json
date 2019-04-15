@@ -1,0 +1,4 @@
+{
+ "board": "feather-m0",
+ "options": "NOLA_DEBUG_SX127X=0 NOLA_DEBUG_LORAWAN=0"
+}
