@@ -11,9 +11,6 @@ static void taskHello(void *) {
 }
 
 void setup() {
-  Serial2.begin(115200);
-  Serial2.printf("\n*** [Feather-M0] OLED FeatherWing Test ***\n");
-
   timerHello.onFired(taskHello, nullptr);
   timerHello.startPeriodic(500);
 
