@@ -1,14 +1,8 @@
 #include <cox.h>
 
 #define PRINT_TO_OLED_WING
+#define SEND_TO_LORAWAN
 
-#ifdef PRINT_TO_OLED_WING
-#include <dev/Adafruit_GFX.hpp>
-#include <dev/Adafruit_SSD1306.hpp>
-Adafruit_SSD1306 display(128, 32, &Wire);
-#endif
-
-Timer timerHello;
 uint16_t distance = 0; //distance
 uint16_t strength = 0; // signal strength
 uint8_t rangeType = 0; //range scale
@@ -19,7 +13,25 @@ uint8_t rangeType = 0; //range scale
 
 const byte sensor1 = 0x10; //TFMini I2C Address
 
-//Write two bytes to a spot
+#ifdef PRINT_TO_OLED_WING
+#include <dev/Adafruit_GFX.hpp>
+#include <dev/Adafruit_SSD1306.hpp>
+Adafruit_SSD1306 display(128, 32, &Wire);
+#endif //PRINT_TO_OLED_WING
+
+#ifdef SEND_TO_LORAWAN
+#include <LoRaMacKR920.hpp>
+SystemFeatherM0::RFM9x RFM95(A4, D10, D11);
+LoRaMacKR920 LoRaWAN(RFM95, 3);
+
+static uint8_t devEui[] = "\x98\x76\xB6\x00\x00\x10\xED\xF9";
+static const uint8_t appEui[] = "\x00\x00\x00\x00\x00\x00\x00\x00";
+static uint8_t appKey[] = "\x8b\xb5\x2a\x8d\x80\xbc\xb0\x49\xbf\xfa\x8d\xb3\x47\x10\xae\xcb";
+
+LoRaMacFrame *sendingFrame = nullptr;
+bool joinedToLoRaWAN = false;
+#endif //SEND_TO_LORAWAN
+
 boolean readDistance(uint8_t deviceAddress) {
   Wire.beginTransmission(deviceAddress);
   Wire.write(0x01); //MSB
@@ -54,10 +66,11 @@ boolean readDistance(uint8_t deviceAddress) {
   return true;
 }
 
-static void taskHello(void *) {
+static void taskSense(void *) {
   digitalWrite(D13, HIGH);
   bool readSuccess = readDistance(sensor1);
   digitalWrite(D13, LOW);
+
   if (readSuccess) {
     Serial2.print("\tDist[");
     Serial2.print(distance);
@@ -89,7 +102,29 @@ static void taskHello(void *) {
 #endif
   }
 
-  timerHello.startOneShot(20);
+#ifdef SEND_TO_LORAWAN
+  if (joinedToLoRaWAN && !sendingFrame) {
+    sendingFrame = new LoRaMacFrame(255);
+    if (!sendingFrame) {
+      Serial2.printf("* Out of memory\n");
+      return;
+    }
+
+    sendingFrame->port = 1;
+    sendingFrame->type = LoRaMacFrame::CONFIRMED;
+    sendingFrame->len = sprintf((char *) sendingFrame->buf, "\"distance\":%u", distance);
+
+    error_t err = LoRaWAN.send(sendingFrame);
+    Serial2.printf("* Sending a report (%s (%u byte)): %d\n", sendingFrame->buf, sendingFrame->len, err);
+    if (err != ERROR_SUCCESS) {
+      delete sendingFrame;
+      sendingFrame = nullptr;
+      return;
+    }
+  }
+#endif
+
+  postTask(taskSense, nullptr);
 }
 
 void setup() {
@@ -107,8 +142,110 @@ void setup() {
   delay(1000);
   display.setTextSize(3);
   display.setTextColor(WHITE);
-#endif
+#endif //PRINT_TO_OLED_WING
 
-  timerHello.onFired(taskHello, nullptr);
-  timerHello.startOneShot(20);
+#ifdef SEND_TO_LORAWAN
+  System.setTimeDiff(9 * 60);  // KST
+
+  LoRaWAN.begin();
+  LoRaWAN.onSendDone([](LoRaMac &lw, LoRaMacFrame *frame) {
+    // digitalWrite(D13, LOW);
+    Serial2.printf(
+      "* Send done(%d): destined for port:%u, fCnt:0x%lX, Freq:%lu Hz, "
+      "Power:%d dBm, # of Tx:%u, ",
+      frame->result,
+      frame->port,
+      frame->fCnt,
+      frame->freq,
+      frame->power,
+      frame->numTrials
+    );
+
+    if (frame->modulation == Radio::MOD_LORA) {
+      const char *strBW[] = {
+        "Unknown", "125kHz", "250kHz", "500kHz", "Unexpected value"
+      };
+      if (frame->meta.LoRa.bw > 3) {
+        frame->meta.LoRa.bw = (Radio::LoRaBW_t) 4;
+      }
+      Serial2.printf(
+        "LoRa, SF:%u, BW:%s, ", frame->meta.LoRa.sf, strBW[frame->meta.LoRa.bw]
+      );
+    } else if (frame->modulation == Radio::MOD_FSK) {
+      Serial2.printf("FSK, ");
+    } else {
+      Serial2.printf("Unkndown modulation, ");
+    }
+    if (frame->type == LoRaMacFrame::UNCONFIRMED) {
+      Serial2.printf("UNCONFIRMED");
+    } else if (frame->type == LoRaMacFrame::CONFIRMED) {
+      Serial2.printf("CONFIRMED");
+    } else if (frame->type == LoRaMacFrame::MULTICAST) {
+      Serial2.printf("MULTICAST (error)");
+    } else if (frame->type == LoRaMacFrame::PROPRIETARY) {
+      Serial2.printf("PROPRIETARY");
+    } else {
+      Serial2.printf("unknown type");
+    }
+    Serial2.printf(" frame\n");
+
+    for (uint8_t t = 0; t < frame->numTrials; t++) {
+      const char *strTxResult[] = {
+        "not started",
+        "success",
+        "no ack",
+        "air busy",
+        "Tx timeout",
+      };
+      Serial2.printf("- [%u] %s\n", t, strTxResult[min(frame->txResult[t], 4)]);
+    }
+    delete frame;
+    if (frame == sendingFrame) {
+      sendingFrame = nullptr;
+    }
+  });
+  LoRaWAN.onJoin([](
+    LoRaMac &lw,
+    bool joined,
+    const uint8_t *joinedDevEui,
+    const uint8_t *joinedAppEui,
+    const uint8_t *joinedAppKey,
+    const uint8_t *joinedNwkSKey,
+    const uint8_t *joinedAppSKey,
+    uint32_t joinedDevAddr,
+    const RadioPacket &,
+    uint32_t airTime
+  ) {
+    Serial2.printf("* Tx time of JoinRequest: %lu usec.\n", airTime);
+
+    if (joined) {
+      Serial2.println("* Joining done!");
+      joinedToLoRaWAN = true;
+    } else {
+      Serial2.println("* Joining failed. Retry to join.");
+      lw.beginJoining(devEui, appEui, appKey);
+    }
+  });
+
+  LoRaWAN.setPublicNetwork(false);
+
+  Serial2.printf(
+    "* DevEUI: %02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X\n",
+    devEui[0], devEui[1], devEui[2], devEui[3],
+    devEui[4], devEui[5], devEui[6], devEui[7]
+  );
+
+  Serial2.printf(
+    "* AppKey: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
+    appKey[0], appKey[1], appKey[2], appKey[3],
+    appKey[4], appKey[5], appKey[6], appKey[7],
+    appKey[8], appKey[9], appKey[10], appKey[11],
+    appKey[12], appKey[13], appKey[14], appKey[15]
+  );
+
+  Serial2.println("* Let's start join!");
+  LoRaWAN.beginJoining(devEui, appEui, appKey);
+#endif //SEND_TO_LORAWAN
+
+  postTask(taskSense, nullptr);
 }
