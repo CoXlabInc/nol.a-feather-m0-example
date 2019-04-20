@@ -155,7 +155,9 @@ void setup() {
 #ifdef SEND_TO_LORAWAN
   System.setTimeDiff(9 * 60);  // KST
 
-  LoRaWAN.begin();
+  LoRaWAN.begin([]() -> uint8_t {
+    return 0; // means that the device is connected to an external power source.
+  });
   LoRaWAN.onSendDone([](LoRaMac &lw, LoRaMacFrame *frame) {
     // digitalWrite(D13, LOW);
     Serial2.printf(
