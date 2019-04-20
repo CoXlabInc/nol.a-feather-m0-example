@@ -30,6 +30,8 @@ static uint8_t appKey[] = "\x8b\xb5\x2a\x8d\x80\xbc\xb0\x49\xbf\xfa\x8d\xb3\x47\
 
 LoRaMacFrame *sendingFrame = nullptr;
 bool joinedToLoRaWAN = false;
+uint16_t distanceLastReported = 0;
+struct timeval timeLastReport;
 #endif //SEND_TO_LORAWAN
 
 boolean readDistance(uint8_t deviceAddress) {
@@ -103,7 +105,10 @@ static void taskSense(void *) {
   }
 
 #ifdef SEND_TO_LORAWAN
-  if (joinedToLoRaWAN && !sendingFrame) {
+  struct timeval now, diff;
+  gettimeofday(&now, nullptr);
+  timersub(&now, &timeLastReport, &diff);
+  if (joinedToLoRaWAN && !sendingFrame && (distance != distanceLastReported || diff.tv_sec > 30)) {
     sendingFrame = new LoRaMacFrame(255);
     if (!sendingFrame) {
       Serial2.printf("* Out of memory\n");
@@ -120,6 +125,9 @@ static void taskSense(void *) {
       delete sendingFrame;
       sendingFrame = nullptr;
       return;
+    } else {
+      distanceLastReported = distance;
+      gettimeofday(&timeLastReport, nullptr);
     }
   }
 #endif
@@ -245,6 +253,8 @@ void setup() {
 
   Serial2.println("* Let's start join!");
   LoRaWAN.beginJoining(devEui, appEui, appKey);
+
+  gettimeofday(&timeLastReport, nullptr);
 #endif //SEND_TO_LORAWAN
 
   postTask(taskSense, nullptr);
