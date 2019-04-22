@@ -1,5 +1,4 @@
 #include <cox.h>
-#include <dev/Adafruit_GFX.hpp>
 #include <dev/Adafruit_SSD1306.hpp>
 
 Adafruit_SSD1306 display(128, 32, &Wire);

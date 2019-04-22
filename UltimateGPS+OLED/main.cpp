@@ -4,15 +4,33 @@
 #include <nmea/gpgga.h>
 #include <nmea/gprmc.h>
 #include <nmea/gpgsv.h>
+#include <dev/Adafruit_SSD1306.hpp>
 
 UltimateGps gps(A5, Serial2);
+Adafruit_SSD1306 display(128, 32, &Wire);
 
 void setup() {
   Serial0.begin(115200);
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.println("*** [Feather-M0] ***");
+  display.println("Ultimate GPS Test");
+  display.display();
+  delay(1000);
+
   gps.begin();
   gps.turnOn();
 
   gps.onNMEAReceived = [](Gps&) {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+
     char *data;
     nmea_s *parsed = nullptr;
     if (gps.getLatestGGA() != nullptr) {
@@ -29,6 +47,38 @@ void setup() {
           Serial0.printf("  Latitude: %d degee %lf %c\n", gga->latitude.degrees, gga->latitude.minutes, gga->latitude.cardinal);
           Serial0.printf("  Altitude: %d %c\n", gga->altitude, gga->altitude_unit);
           Serial0.printf("  Number of satellites: %d\n", gga->n_satellites);
+
+          if (gga->time.tm_hour < 10) display.print('0');
+          display.print(gga->time.tm_hour);
+          display.print(':');
+          if (gga->time.tm_min < 10) display.print('0');
+          display.print(gga->time.tm_min);
+          display.print(':');
+          if (gga->time.tm_sec < 10) display.print('0');
+          display.println(gga->time.tm_sec);
+
+          if (gga->position_fix == 0) {
+            display.println("Position not fixed.");
+            display.print("Wait");
+            static uint8_t dot_wait = 0;
+
+            switch (dot_wait++ % 3) {
+              case 0: display.print(".  "); break;
+              case 1: display.print(" . "); break;
+              default: display.print("  ."); break;
+            }
+          } else {
+            display.print(gga->longitude.degrees);
+            display.print(" deg ");
+            display.println(gga->longitude.minutes, 4);
+            display.print(gga->latitude.degrees);
+            display.print(" deg ");
+            display.println(gga->latitude.minutes, 4);
+            display.print(gga->altitude);
+            display.print(' ');
+            display.println(gga->altitude_unit);
+          }
+          display.display();
         } else {
           Serial0.printf("  Parsing GGA error (%p)\n", parsed);
         }
@@ -116,4 +166,21 @@ void setup() {
 
     Serial0.printf("GSA: %s\n", (gps.getLatestGSA()) ? gps.getLatestGSA() : "(null)");
   };
+
+  pinMode(D9, INPUT_PULLUP);
+  attachInterrupt(D9, []() {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    if (gps.isOn()) {
+      display.print("Turn off GPS !");
+      gps.turnOff();
+    } else {
+      display.print("Turn on GPS !");
+      gps.turnOn();
+    }
+    display.display();
+  }, FALLING);
+
+  pinMode(D13, OUTPUT);
+  digitalWrite(D13, LOW);
 }
