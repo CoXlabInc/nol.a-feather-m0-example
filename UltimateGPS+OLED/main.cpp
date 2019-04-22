@@ -68,12 +68,16 @@ void setup() {
               default: display.print("  ."); break;
             }
           } else {
-            display.print(gga->longitude.degrees);
-            display.print(" deg ");
-            display.println(gga->longitude.minutes, 4);
             display.print(gga->latitude.degrees);
             display.print(" deg ");
-            display.println(gga->latitude.minutes, 4);
+            display.print(gga->latitude.minutes, 4);
+            display.print(' ');
+            display.println(gga->latitude.cardinal);
+            display.print(gga->longitude.degrees);
+            display.print(" deg ");
+            display.print(gga->longitude.minutes, 4);
+            display.print(' ');
+            display.println(gga->longitude.cardinal);
             display.print(gga->altitude);
             display.print(' ');
             display.println(gga->altitude_unit);
