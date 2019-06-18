@@ -11,6 +11,9 @@
 UltimateGps gps(A5, Serial2);
 Adafruit_SSD1306 display(128, 32, &Wire);
 
+uint8_t fixQuality = 0;
+nmea_position longToReport, latToReport;
+
 #ifdef SEND_TO_LORAWAN
 #include <LoRaMacKR920.hpp>
 
@@ -22,6 +25,7 @@ static const uint8_t appEui[] = "\x00\x00\x00\x00\x00\x00\x00\x00";
 static uint8_t appKey[] = "\x94\x62\xef\xdb\x8c\x62\x01\xe7\x52\x09\x8f\x17\x3c\x2a\x4b\x1c";
 
 Timer timerSend;
+struct timeval tLoRaWANDisplayed;
 
 static void taskPeriodicSend(void *) {
   LoRaMacFrame *f = new LoRaMacFrame(255);
@@ -34,8 +38,10 @@ static void taskPeriodicSend(void *) {
   f->type = LoRaMacFrame::CONFIRMED;
   f->len = sprintf(
     (char *) f->buf,
-    "\"Now\":%lu",
-    (uint32_t) System.getDateTime()
+    "\":fix\":%u,\"lat\":\"%d %lf %c\",\"long\":\"%d %lf %c\"",
+    fixQuality,
+    latToReport.degrees, latToReport.minutes, (latToReport.cardinal == 0) ? 'N' : latToReport.cardinal,
+    longToReport.degrees, longToReport.minutes, (longToReport.cardinal == 0) ? 'E' : longToReport.cardinal
   );
 
   /* Uncomment below line to specify frequency. */
@@ -52,6 +58,18 @@ static void taskPeriodicSend(void *) {
   // f->numTrials = 1;
 
   error_t err = LoRaWAN.send(f);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("Uplink ");
+  display.print(f->len);
+  display.print(' ');
+  display.println("byte");
+  display.print(" - Result:");
+  display.print(err);
+  display.display();
+  gettimeofday(&tLoRaWANDisplayed, nullptr);
+
   Serial0.printf("* Sending periodic report (%s (%u byte)): %d\n", f->buf, f->len, err);
   if (err != ERROR_SUCCESS) {
     delete f;
@@ -85,8 +103,15 @@ void setup() {
   gps.turnOn();
 
   gps.onNMEAReceived = [](Gps&) {
-    display.clearDisplay();
-    display.setCursor(0, 0);
+    struct timeval tNow, tDiff;
+    gettimeofday(&tNow, nullptr);
+    timersub(&tNow, &tLoRaWANDisplayed, &tDiff);
+    bool doDisplay = (tDiff.tv_sec >= 2);
+
+    if (doDisplay) {
+      display.clearDisplay();
+      display.setCursor(0, 0);
+    }
 
     char *data;
     nmea_s *parsed = nullptr;
@@ -105,41 +130,52 @@ void setup() {
           Serial0.printf("  Altitude: %d %c\n", gga->altitude, gga->altitude_unit);
           Serial0.printf("  Number of satellites: %d\n", gga->n_satellites);
 
-          if (gga->time.tm_hour < 10) display.print('0');
-          display.print(gga->time.tm_hour);
-          display.print(':');
-          if (gga->time.tm_min < 10) display.print('0');
-          display.print(gga->time.tm_min);
-          display.print(':');
-          if (gga->time.tm_sec < 10) display.print('0');
-          display.println(gga->time.tm_sec);
+          latToReport = gga->latitude;
+          longToReport = gga->longitude;
+          fixQuality = gga->position_fix;
 
-          if (gga->position_fix == 0) {
-            display.println("Position not fixed.");
-            display.print("Wait");
-            static uint8_t dot_wait = 0;
+          if (doDisplay) {
+            if (gga->time.tm_hour < 10) display.print('0');
+            display.print(gga->time.tm_hour);
+            display.print(':');
+            if (gga->time.tm_min < 10) display.print('0');
+            display.print(gga->time.tm_min);
+            display.print(':');
+            if (gga->time.tm_sec < 10) display.print('0');
+            display.print(gga->time.tm_sec);
+            display.print("  ");
+            int32_t vBat = map(analogRead(D9), 0, 4095, 0, 2 * 3300 * 100 / 148);
+            display.print(vBat);
+            display.println(" mV");
 
-            switch (dot_wait++ % 3) {
-              case 0: display.print(".  "); break;
-              case 1: display.print(" . "); break;
-              default: display.print("  ."); break;
+
+            if (gga->position_fix == 0) {
+              display.println("Position not fixed.");
+              display.print("Wait");
+              static uint8_t dot_wait = 0;
+
+              switch (dot_wait++ % 3) {
+                case 0: display.print(".  "); break;
+                case 1: display.print(" . "); break;
+                default: display.print("  ."); break;
+              }
+            } else {
+              display.print(gga->latitude.degrees);
+              display.print(" deg ");
+              display.print(gga->latitude.minutes, 4);
+              display.print(' ');
+              display.println(gga->latitude.cardinal);
+              display.print(gga->longitude.degrees);
+              display.print(" deg ");
+              display.print(gga->longitude.minutes, 4);
+              display.print(' ');
+              display.println(gga->longitude.cardinal);
+              display.print(gga->altitude);
+              display.print(' ');
+              display.println(gga->altitude_unit);
             }
-          } else {
-            display.print(gga->latitude.degrees);
-            display.print(" deg ");
-            display.print(gga->latitude.minutes, 4);
-            display.print(' ');
-            display.println(gga->latitude.cardinal);
-            display.print(gga->longitude.degrees);
-            display.print(" deg ");
-            display.print(gga->longitude.minutes, 4);
-            display.print(' ');
-            display.println(gga->longitude.cardinal);
-            display.print(gga->altitude);
-            display.print(' ');
-            display.println(gga->altitude_unit);
+            display.display();
           }
-          display.display();
         } else {
           Serial0.printf("  Parsing GGA error (%p)\n", parsed);
         }
@@ -228,8 +264,8 @@ void setup() {
     Serial0.printf("GSA: %s\n", (gps.getLatestGSA()) ? gps.getLatestGSA() : "(null)");
   };
 
-  pinMode(D9, INPUT_PULLUP);
-  attachInterrupt(D9, []() {
+  pinMode(D5, INPUT_PULLUP);
+  attachInterrupt(D5, []() {
     display.clearDisplay();
     display.setCursor(0, 0);
     if (gps.isOn()) {
@@ -245,14 +281,32 @@ void setup() {
   pinMode(D13, OUTPUT);
   digitalWrite(D13, LOW);
 
+  pinMode(D9, INPUT);
+
 #ifdef SEND_TO_LORAWAN
   System.setTimeDiff(9 * 60);  // KST
 
   LoRaWAN.begin([]() -> uint8_t {
-    return 0; // means that the device is connected to an external power source.
+    int32_t vBat = map(analogRead(D9), 0, 4095, 0, 2 * 3300 * 100 / 148);
+    if (vBat < 0) {
+      return 255; // not measured
+    } else {
+      return map(vBat, 3300, 4200, 1, 254); // measured battery level
+    }
   });
   LoRaWAN.onSendDone([](LoRaMac &lw, LoRaMacFrame *frame) {
     digitalWrite(D13, LOW);
+
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Uplink (");
+    display.print(frame->fCnt);
+    display.println(") done");
+    display.print(" - Result:");
+    display.print(frame->result);
+    display.display();
+    gettimeofday(&tLoRaWANDisplayed, nullptr);
+
     Serial0.printf(
       "* Send done(%d): destined for port:%u, fCnt:0x%lX, Freq:%lu Hz, "
       "Power:%d dBm, # of Tx:%u, ",

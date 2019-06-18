@@ -5,8 +5,14 @@ Timer timerHello;
 static void taskHello(void *) {
   struct timeval t;
   gettimeofday(&t, nullptr);
-  Serial2.printf("[%lu.%06lu] Hello World!\n", (uint32_t) t.tv_sec, t.tv_usec);
-  digitalToggle(D13);
+  Serial2.printf("- [%lu.%06lu] Hello World!\n", (uint32_t) t.tv_sec, t.tv_usec);
+
+  int32_t vcc = System.getSupplyVoltage();
+  Serial2.printf("- Supply voltage: %ld mV\n", vcc);
+  // digitalToggle(D13);
+
+  Serial2.printf("- A0: %ld (%ld), VBAT=%ld mV\n",
+   map(analogRead(A0), 0, 4095, 0, 2230), analogRead(A0), map(analogRead(D9), 0, 4095, 0, 2230 * 2));
 }
 
 void setup() {
@@ -31,4 +37,6 @@ void setup() {
   digitalWrite(D13, HIGH);
 
   Serial2.printf("- random(): %lu\n", random()); // This value must be changed on every boot.
+
+  pinMode(A0, INPUT);
 }
