@@ -5,6 +5,7 @@
 #include <nmea/gprmc.h>
 #include <nmea/gpgsv.h>
 #include <dev/Adafruit_SSD1306.hpp>
+#include <algorithm>
 
 #define SEND_TO_LORAWAN
 
@@ -354,7 +355,7 @@ void setup() {
         "air busy",
         "Tx timeout",
       };
-      Serial0.printf("- [%u] %s\n", t, strTxResult[min(frame->txResult[t], 4)]);
+      Serial0.printf("- [%u] %s\n", t, strTxResult[std::min((int) frame->txResult[t], 4)]);
     }
     delete frame;
     timerSend.startOneShot(10000);

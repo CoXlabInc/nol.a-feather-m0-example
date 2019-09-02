@@ -1,4 +1,5 @@
 #include <cox.h>
+#include <algorithm>
 
 #define INTERVAL_SEND 20000
 #define INIT_CLASS_C 0
@@ -126,7 +127,7 @@ static void eventLoRaWANSendDone(LoRaMac &lw, LoRaMacFrame *frame) {
       "air busy",
       "Tx timeout",
     };
-    Serial2.printf("- [%u] %s\n", t, strTxResult[min(frame->txResult[t], 4)]);
+    Serial2.printf("- [%u] %s\n", t, strTxResult[std::min((int) frame->txResult[t], 4)]);
   }
   delete frame;
 
@@ -153,7 +154,7 @@ static void eventLoRaWANReceive(LoRaMac &lw, const LoRaMacFrame *frame) {
     };
     Serial2.printf(
       ", LoRa, SF:%u, BW:%s",
-      frame->meta.LoRa.sf, strBW[min(frame->meta.LoRa.bw, 4)]
+      frame->meta.LoRa.sf, strBW[std::min((int) frame->meta.LoRa.bw, 4)]
     );
   } else if (frame->modulation == Radio::MOD_FSK) {
     Serial2.printf(", FSK");
