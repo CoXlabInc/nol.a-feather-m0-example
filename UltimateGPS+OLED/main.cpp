@@ -6,8 +6,65 @@
 #include <nmea/gpgsv.h>
 #include <dev/Adafruit_SSD1306.hpp>
 
+#define SEND_TO_LORAWAN
+
 UltimateGps gps(A5, Serial2);
 Adafruit_SSD1306 display(128, 32, &Wire);
+
+#ifdef SEND_TO_LORAWAN
+#include <LoRaMacKR920.hpp>
+
+SystemFeatherM0::RFM9x RFM95(A1, D10, D11);
+LoRaMacKR920 LoRaWAN(RFM95, 3);
+
+static uint8_t devEui[] = "\x98\x76\xB6\x00\x00\x10\xED\x7D";
+static const uint8_t appEui[] = "\x00\x00\x00\x00\x00\x00\x00\x00";
+static uint8_t appKey[] = "\x94\x62\xef\xdb\x8c\x62\x01\xe7\x52\x09\x8f\x17\x3c\x2a\x4b\x1c";
+
+Timer timerSend;
+
+static void taskPeriodicSend(void *) {
+  LoRaMacFrame *f = new LoRaMacFrame(255);
+  if (!f) {
+    printf("* Out of memory\n");
+    return;
+  }
+
+  f->port = 1;
+  f->type = LoRaMacFrame::CONFIRMED;
+  f->len = sprintf(
+    (char *) f->buf,
+    "\"Now\":%lu",
+    (uint32_t) System.getDateTime()
+  );
+
+  /* Uncomment below line to specify frequency. */
+  // f->freq = 922500000;
+
+  /* Uncomment below lines to specify parameters manually. */
+  // LoRaWAN.useADR = false;
+  // f->modulation = Radio::MOD_LORA;
+  // f->meta.LoRa.bw = Radio::BW_125kHz;
+  // f->meta.LoRa.sf = Radio::SF7;
+  // f->power = 1; /* Index 1 => MaxEIRP - 2 dBm */
+
+  /* Uncomment below line to specify number of trials. */
+  // f->numTrials = 1;
+
+  error_t err = LoRaWAN.send(f);
+  Serial0.printf("* Sending periodic report (%s (%u byte)): %d\n", f->buf, f->len, err);
+  if (err != ERROR_SUCCESS) {
+    delete f;
+    timerSend.startOneShot(10000);
+    return;
+  }
+
+  err = LoRaWAN.requestDeviceTime();
+  printf("* Request DeviceTime: %d\n", err);
+
+  digitalWrite(D13, HIGH);
+}
+#endif //SEND_TO_LORAWAN
 
 void setup() {
   Serial0.begin(115200);
@@ -43,8 +100,8 @@ void setup() {
           nmea_gpgga_s *gga = (nmea_gpgga_s *) parsed;
           Serial0.printf("  Position fix indicator:%u\n", gga->position_fix);
           Serial0.printf("  Time: %02u:%02u:%02u\n", gga->time.tm_hour, gga->time.tm_min, gga->time.tm_sec);
-          Serial0.printf("  Longitude: %d degee %lf %c\n", gga->longitude.degrees, gga->longitude.minutes, gga->longitude.cardinal);
-          Serial0.printf("  Latitude: %d degee %lf %c\n", gga->latitude.degrees, gga->latitude.minutes, gga->latitude.cardinal);
+          Serial0.printf("  Longitude: %d deg %lf %c\n", gga->longitude.degrees, gga->longitude.minutes, gga->longitude.cardinal);
+          Serial0.printf("  Latitude: %d deg %lf %c\n", gga->latitude.degrees, gga->latitude.minutes, gga->latitude.cardinal);
           Serial0.printf("  Altitude: %d %c\n", gga->altitude, gga->altitude_unit);
           Serial0.printf("  Number of satellites: %d\n", gga->n_satellites);
 
@@ -150,8 +207,8 @@ void setup() {
             rmc->time.tm_year + 1900, rmc->time.tm_mon + 1, rmc->time.tm_mday,
             rmc->time.tm_hour, rmc->time.tm_min, rmc->time.tm_sec
           );
-          Serial0.printf("  Longitude: %d degree %lf %c\n", rmc->longitude.degrees, rmc->longitude.minutes, rmc->longitude.cardinal);
-          Serial0.printf("  Latitude: %d degree %lf %c\n", rmc->latitude.degrees, rmc->latitude.minutes, rmc->latitude.cardinal);
+          Serial0.printf("  Longitude: %d deg %lf %c\n", rmc->longitude.degrees, rmc->longitude.minutes, rmc->longitude.cardinal);
+          Serial0.printf("  Latitude: %d deg %lf %c\n", rmc->latitude.degrees, rmc->latitude.minutes, rmc->latitude.cardinal);
           Serial0.printf("  Speed: %lf\n", rmc->speed);
         } else {
           Serial0.printf("  Parsing RMC error (%p)\n", parsed);
