@@ -1,8 +1,10 @@
 #include <cox.h>
 #include <dev/Adafruit_AMG88xx.hpp>
+#include <dev/Adafruit_SSD1306.hpp>
 #include <LoRaMacKR920.hpp>
 
 Adafruit_AMG88xx amg(Wire);
+Adafruit_SSD1306 display(128, 32, &Wire);
 SystemFeatherM0::RFM9x RFM95(A4, D10, D11);
 LoRaMacKR920 LoRaWAN(RFM95, 3);
 
@@ -46,13 +48,52 @@ static void taskSense(void *) {
     postTask(taskSense, nullptr);
     return;
   }
+  digitalWrite(D13, HIGH);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("Uplink ");
+  display.print(f->len);
+  display.print(' ');
+  display.println("byte");
+  display.print(" - Result:");
+  display.println(err);
+  display.println();
+  display.print("Temp:");
+  display.println(amg.readThermistor());
+  display.display();
 }
 
 void setup() {
   Serial2.begin(115200);
 
+  pinMode(D13, OUTPUT);
+  digitalWrite(D13, LOW);
+
+  pinMode(D5, INPUT_PULLUP);
+  attachInterrupt(D5, []() {
+    taskSense(nullptr);
+    display.setCursor(0, 32);
+    display.println("Sense immediately!");
+    display.display();
+  }, FALLING);
+
+  pinMode(D9, INPUT);
+
   Wire.begin();
   amg.begin();
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.println("*** [Feather-M0] ***");
+  display.println("AMG8833 Test");
+  display.display();
+  delay(1000);
 
   static Timer timerSense;
   timerSense.onFired(taskSense, nullptr);
@@ -60,10 +101,25 @@ void setup() {
   System.setTimeDiff(9 * 60);  // KST
 
   LoRaWAN.begin([]() -> uint8_t {
-    return 0; // means that the device is connected to an external power source.
+    int32_t vBat = map(analogRead(D9), 0, 4095, 0, 2 * 3300 * 100 / 148);
+    if (vBat < 0) {
+      return 255; // not measured
+    } else {
+      return map(vBat, 3300, 4200, 1, 254); // measured battery level
+    }
   });
   LoRaWAN.onSendDone([](LoRaMac &lw, LoRaMacFrame *frame) {
-    // digitalWrite(D13, LOW);
+    digitalWrite(D13, LOW);
+
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Uplink (");
+    display.print(frame->fCnt);
+    display.println(") done");
+    display.print(" - Result:");
+    display.print(frame->result);
+    display.display();
+
     Serial2.printf(
       "* Send done(%d): destined for port:%u, fCnt:0x%lX, Freq:%lu Hz, "
       "Power:%d dBm, # of Tx:%u, ",
