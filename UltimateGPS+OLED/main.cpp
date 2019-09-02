@@ -46,7 +46,7 @@ static void taskPeriodicSend(void *) {
       longToReport.degrees + longToReport.minutes / 60
     );
   } else {
-    f->len = sprintf((char *) f->buf, "\"gnss\":{}");
+    f->len = sprintf((char *) f->buf, "\"gnss\":0");
   }
 
   /* Uncomment below line to specify frequency. */
@@ -290,6 +290,7 @@ void setup() {
 
 #ifdef SEND_TO_LORAWAN
   System.setTimeDiff(9 * 60);  // KST
+  RFM95.antennaGain = -6; // for low-gain antennas
 
   LoRaWAN.begin([]() -> uint8_t {
     int32_t vBat = map(analogRead(D9), 0, 4095, 0, 2 * 3300 * 100 / 148);
