@@ -37,13 +37,17 @@ static void taskPeriodicSend(void *) {
 
   f->port = 1;
   f->type = LoRaMacFrame::CONFIRMED;
-  f->len = sprintf(
-    (char *) f->buf,
-    "\":fix\":%u,\"lat\":\"%d %lf %c\",\"long\":\"%d %lf %c\"",
-    fixQuality,
-    latToReport.degrees, latToReport.minutes, (latToReport.cardinal == 0) ? 'N' : latToReport.cardinal,
-    longToReport.degrees, longToReport.minutes, (longToReport.cardinal == 0) ? 'E' : longToReport.cardinal
-  );
+
+  if (fixQuality) {
+    f->len = sprintf(
+      (char *) f->buf,
+      "\"gnss\":{\"latitude\":%lf,\"longitude\":%lf}",
+      latToReport.degrees + latToReport.minutes / 60,
+      longToReport.degrees + longToReport.minutes / 60
+    );
+  } else {
+    f->len = sprintf((char *) f->buf, "\"gnss\":{}");
+  }
 
   /* Uncomment below line to specify frequency. */
   // f->freq = 922500000;
