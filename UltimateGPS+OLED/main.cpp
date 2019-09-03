@@ -41,7 +41,7 @@ static void taskPeriodicSend(void *) {
   if (fixQuality) {
     f->len = sprintf(
       (char *) f->buf,
-      "\"gnss\":{\"latitude\":%lf,\"longitude\":%lf}",
+      "\"gnss\":[%lf,%lf]",
       latToReport.degrees + latToReport.minutes / 60,
       longToReport.degrees + longToReport.minutes / 60
     );
