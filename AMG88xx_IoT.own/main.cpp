@@ -2,6 +2,7 @@
 #include <dev/Adafruit_AMG88xx.hpp>
 #include <dev/Adafruit_SSD1306.hpp>
 #include <LoRaMacKR920.hpp>
+#include <algorithm>
 
 Adafruit_AMG88xx amg(Wire);
 Adafruit_SSD1306 display(128, 32, &Wire);
@@ -167,7 +168,7 @@ void setup() {
         "air busy",
         "Tx timeout",
       };
-      Serial2.printf("- [%u] %s\n", t, strTxResult[min(frame->txResult[t], 4)]);
+      Serial2.printf("- [%u] %s\n", t, strTxResult[std::min((int) frame->txResult[t], 4)]);
     }
     delete frame;
     timerSense.startOneShot(10000);

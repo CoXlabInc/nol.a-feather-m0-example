@@ -1,4 +1,5 @@
 #include <cox.h>
+#include <algorithm>
 
 #define PRINT_TO_OLED_WING
 #define SEND_TO_LORAWAN
@@ -207,7 +208,7 @@ void setup() {
         "air busy",
         "Tx timeout",
       };
-      Serial2.printf("- [%u] %s\n", t, strTxResult[min(frame->txResult[t], 4)]);
+      Serial2.printf("- [%u] %s\n", t, strTxResult[std::min((int) frame->txResult[t], 4)]);
     }
     delete frame;
     if (frame == sendingFrame) {
