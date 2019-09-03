@@ -26,15 +26,29 @@ static void taskSense(void *) {
 
   f->port = 1;
   f->type = LoRaMacFrame::CONFIRMED;
+
+  /*
+  64 56 48 40 32 24 16  8
+  63 55 47 39 31 23 15  7
+  62 54 46 38 30 22 14  6
+  61 53 45 37 29 21 13  5
+  60 52 44 36 28 20 12  4
+  59 51 43 35 27 19 11  3
+  58 50 42 34 26 18 10  2
+  57 49 41 33 25 17  9  1
+  */
   uint8_t i = sprintf((char *) f->buf, "UAMG88xx");
-  for (int y = 0; y < AMG88xx_PIXEL_ARRAY_SIZE; y++) {
-    uint16_t temp = (uint16_t) round(pixels[y] * 100);
-    f->buf[i++] = lowByte(temp);
-    f->buf[i++] = highByte(temp);
-    Serial2.print('['); Serial2.print(y); Serial2.print(']'); Serial2.print(' ');
-    Serial2.print(pixels[y]);
-    Serial2.print(" => ");
-    Serial2.println(temp);
+  for (int y = 0; y < 8; y++) {
+    for (int x = 8; x > 0; x--) {
+      uint8_t p = 8 * x - y - 1;
+      uint16_t temp = (uint16_t) round(pixels[p] * 100);
+      f->buf[i++] = lowByte(temp);
+      f->buf[i++] = highByte(temp);
+      Serial2.print('['); Serial2.print(y); Serial2.print(']'); Serial2.print(' ');
+      Serial2.print(pixels[y]);
+      Serial2.print(" => ");
+      Serial2.println(temp);
+    }
   }
   f->len = i;
   LoRaWAN.useADR = false;
