@@ -184,7 +184,7 @@ void setup() {
         } else {
           Serial0.printf("  Parsing GGA error (%p)\n", parsed);
         }
-        delete data;
+        delete[] data;
       } else {
         Serial0.printf("  No memory to parse GGA\n");
       }
@@ -221,7 +221,7 @@ void setup() {
           } else {
             Serial0.printf("  Parsing GSV error (%p)\n", parsed);
           }
-          delete data;
+          delete[] data;
         } else {
           Serial0.printf("  No memory to parse GSV\n");
         }
@@ -254,7 +254,7 @@ void setup() {
         } else {
           Serial0.printf("  Parsing RMC error (%p)\n", parsed);
         }
-        delete data;
+        delete[] data;
       } else {
         Serial0.printf("  No memory to parse RMC\n");
       }
