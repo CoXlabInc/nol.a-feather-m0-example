@@ -245,12 +245,16 @@ void setup() {
           Serial0.printf("  Status: %s\n", rmc->valid ? "valid" : "not valid");
           Serial0.printf(
             "  Date time: %u-%02u-%02u %02u:%02u:%02u\n",
-            rmc->time.tm_year + 1900, rmc->time.tm_mon + 1, rmc->time.tm_mday,
-            rmc->time.tm_hour, rmc->time.tm_min, rmc->time.tm_sec
+            rmc->date_time.tm_year + 1900,
+            rmc->date_time.tm_mon + 1,
+            rmc->date_time.tm_mday,
+            rmc->date_time.tm_hour,
+            rmc->date_time.tm_min,
+            rmc->date_time.tm_sec
           );
           Serial0.printf("  Longitude: %d deg %lf %c\n", rmc->longitude.degrees, rmc->longitude.minutes, rmc->longitude.cardinal);
           Serial0.printf("  Latitude: %d deg %lf %c\n", rmc->latitude.degrees, rmc->latitude.minutes, rmc->latitude.cardinal);
-          Serial0.printf("  Speed: %lf\n", rmc->speed);
+          Serial0.printf("  Speed: %lf\n", rmc->gndspd_knots);
         } else {
           Serial0.printf("  Parsing RMC error (%p)\n", parsed);
         }
